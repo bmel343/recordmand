@@ -32,6 +32,21 @@ def init_client(key, secret):
     client = ZoomClient(api_key, api_secret)
     return(client)
 
+def get_localtime_str(time_string):
+    #This is only for Zoom time strings in this format: 2020-10-15T17:20:04Z
+    try:
+        start_date, start_time = time_string.split('T')
+    except:
+        if debug:
+            print('I could not process this time string: {0}'.format(time_string))
+        return(time_string)
+    hour, minute, second = start_time.split(':')
+    start_time = "{0}:{1}".format(
+        str(int(hour) - 5), str(minute))
+    localtime_str = '{0}-{1}'.format(
+        start_date, start_time)
+    return(localtime_str)
+
 def get_meeting_details(meeting_id):
     endpoint = 'meetings/%s' % meeting_id
     response = client.get_request(endpoint)
@@ -64,58 +79,34 @@ def get_recordings_by_meeting_id(meeting_id):
     #Starting Over
     meeting_details = get_meeting_details(meeting_id)
     host_user_id = meeting_details['host_id']
+    topic = meeting_details['topic']
     response = client.recording.list(user_id=host_user_id).content
     recording_list = json.loads(response)
-    recordings_password = get_recording_password(meeting_id)
-    print('Meeting ID: {0}, Password: {1} \n Available recordings: '.format(meeting_id, recordings_password))
+    
+    print('\nMeeting: {0}, ID: {1}\n Available recordings: '.format(topic, meeting_id))
     if debug:
         print("Recording List: \n {0}".format(recording_list))
     for meeting in recording_list['meetings']:
-        for file in meeting['recording_files']:
-            topic = str(meeting['topic'])
-            this_meeting_id = str(meeting['id'])
-            share_url = str(meeting['share_url'])
-            if this_meeting_id == str(meeting_id):
-                    for file in meeting['recording_files']:
-                        recording_id = str(file['id'])
-                        start_time = str(file['recording_start'])
-                        end_time = str(file['recording_end'])
-                        play_url = str(file['play_url'])
-                        download_url = str(file['download_url'])
-                        print('\t{0}, {1}, {2}, {3}'.format(
-                            recording_id, start_time, end_time,
-                            play_url))
-                        #inc counter after
-    #Because zoom's dumb api thinks only end users use API written apps?
-    #We have to look up the meeting separately, then make the meeting calls based on that users id
-    #This sucks. the 'meetings' endpoint will only return one recording? and it's not parsing well
-    #The zoomus lib only supports meeting searches by user ID...
-    #maybe take meeting ID, resolve user ID, list all recordings by user ID, then match by meeting_id again?
-    #endpoint = 'meetings/' + str(meeting_id) + '/recordings'
-    #print(endpoint)
-    #response = client.get_request(endpoint)
-    #print(response)
-    #print(response.content)
-    #recordings = json.loads(response.content)
-    #print(recordings)
-    #print(type(recordings))
-    ##for meeting in recording_list['meetings']:
-    #    #write meeting header
-    #    #ifile = 1
-        #topic = str(meeting['topic'])
-        #meeting_id = str(meeting['id'])
-        #share_url = str(meeting['share_url'])
-        #print("'" + topic + "', '" + meeting_id + "', '" + share_url + "'")
-    #for file in recordings:
-    #    type(file)
-        #retrieve actual meeting files
-   #     parent_meeting = str(file['meeting_id'])
-   #     start_time = str(file['recording_start'])
-   #     end_time = str(file['recording_end'])
-   #     share_url = str(file['share_url'])
-   #     print("'" + str(ifile) + "', '" + parent_meeting + "', '" + start_time + "', '" + end_time + "', '" + redist_url + "'")
-        #inc counter after
-  #      ifile + 1
+        uuid = meeting['uuid']
+        count = meeting['recording_count']
+        if count != 0:
+            if debug:
+                print(uuid)
+            recordings_password = get_recording_password(uuid)
+            for file in meeting['recording_files']:
+                topic = str(meeting['topic'])
+                this_meeting_id = str(meeting['id'])
+                share_url = str(meeting['share_url'])
+                if this_meeting_id == str(meeting_id):
+                        for file in meeting['recording_files']:
+                            #recording_id = str(file['id'])
+                            start_time = get_localtime_str(file['recording_start'])
+                            end_time = get_localtime_str(file['recording_end'])
+                            play_url = str(file['play_url'])
+                            download_url = str(file['download_url'])
+                            print('\t{0}, {1},Password: {2}, {3}'.format(
+                                start_time, end_time,
+                                recordings_password, play_url))
 
 def get_recording_password(meeting_id):
     endpoint = '/meetings/{0}/recordings/settings'.format(meeting_id)
@@ -127,12 +118,11 @@ def get_recording_password(meeting_id):
         print(settings_json)
     password = settings_json["password"]
     return(password)
-    
 
 def get_recordings_from_config(config):
     for user in config['Users']:
         meetings = config['Users'][user].split(',')
-        print('Fetching recordings for {0}'.format(user))
+        print('\nFetching recordings for {0}'.format(user))
         if debug:
             print('\\CONFIG PASS \r\n config_user: {0}, config_meetings: {1}'.format(user, meetings))
         for meeting_id in meetings:
